@@ -8,6 +8,10 @@ from ollama import AsyncClient
 import asyncio
 import os
 
+
+from utilities.excel_loader import load_excel_as_query_engine
+
+
 # Helper to load supported files
 def load_file(file_path, file_type):
     if file_type.endswith(".pdf"):
@@ -16,6 +20,8 @@ def load_file(file_path, file_type):
         return Docx2txtLoader(file_path).load()
     elif file_type.endswith(".txt"):
         return TextLoader(file_path).load()
+    elif file_type.endswith(".xlsx"):
+        return load_excel_as_query_engine(file_path).load
     else:
         raise ValueError("Unsupported file format")
 
