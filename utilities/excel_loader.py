@@ -1,54 +1,29 @@
-# import os
-# import tempfile
-# from llama_index.core import Settings, VectorStoreIndex
-# # from llama_index.readers.docling import DoclingReader
-# from llama_index.core.node_parser import MarkdownNodeParser
-# from llama_index.core import SimpleDirectoryReader
-# from langchain.embeddings import HuggingFaceEmbeddings
-# from ollama import AsyncClient
+import pandas as pd
+from langchain.schema import Document
 
-# from llama_index.core.prompts import PromptTemplate
+def df_to_key_value_text(df):
+    """
+    Converts a DataFrame to a text format where each row is represented as 
+    consecutive lines of 'field: value' pairs.
+    """
+    records_text = ""
+    for _, row in df.iterrows():
+        for col in df.columns:
+            records_text += f"{col}: {row[col]}\n"
+        records_text += "\n"  # Add a blank line to separate records
+    return records_text.strip()
 
-# def load_excel_as_query_engine(excel_file, model_name="llama3"):
-#     with tempfile.TemporaryDirectory() as temp_dir:
-#         file_path = os.path.join(temp_dir, excel_file.name)
-#         with open(file_path, "wb") as f:
-#             f.write(excel_file.getvalue())
+def excel_parser(excel_path):
+    """Excel df parsing with structured text conversion"""
+    df = pd.read_excel(excel_path)
 
-#         # Load Excel via DoclingReader
-#         extractor = DoclingReader()
-#         loader = SimpleDirectoryReader(
-#             input_dir=temp_dir,
-#             file_extractor={".xlsx": extractor}
-#         )
-#         documents = loader.load_data()
+    # Option 1: Combine all rows into one document (recommended for small files)
+    text = df_to_key_value_text(df)
+    return [Document(page_content=text)]
 
-#         # # Configure embedding + LLM
-#         # Settings.embed_model = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5", trust_remote_code=True)
-#         # async for part in await AsyncClient().chat(model='llama3', messages=[message], stream=True):
-#         #     chunk = part['message']['content']
-#         #     output += chunk
-#         #     yield chunk
-
-#         # # Optional: custom chunking parser
-#         # node_parser = MarkdownNodeParser()
-
-#         # # Build index
-#         # index = VectorStoreIndex.from_documents(documents, transformations=[node_parser])
-
-#         # # Set up query engine
-#         # query_engine = index.as_query_engine(streaming=True)
-
-#         # # Optional: custom prompt
-#         # custom_prompt = PromptTemplate(
-#         #     "Context information is provided below:\n"
-#         #     "---------------------\n"
-#         #     "{context_str}\n"
-#         #     "---------------------\n"
-#         #     "Based on the above context, answer the query in a step-by-step, concise, and precise manner. "
-#         #     "If uncertain, reply with 'I don't know!'.\n"
-#         #     "Query: {query_str}\n"
-#         #     "Answer: "
-#         # )
-#         # query_engine.update_prompts({"response_synthesizer:text_qa_template": custom_prompt})
-#         # return query_engine
+    # Option 2: Split each row into its own Document (good for large datasets)
+    # docs = []
+    # for _, row in df.iterrows():
+    #     row_text = '\n'.join([f"{col}: {row[col]}" for col in df.columns])
+    #     docs.append(Document(page_content=row_text))
+    # return docs

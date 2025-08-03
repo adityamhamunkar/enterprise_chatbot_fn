@@ -12,6 +12,7 @@ import os
 
 # from utilities.excel_loader import load_excel_as_query_engine
 from utilities.pdf_parser import docling_pdf_parser
+from utilities.excel_loader import excel_parser
 
 
 # Helper to load supported files
@@ -22,40 +23,53 @@ def load_file(file_path, file_type):
         return Docx2txtLoader(file_path).load()
     elif file_type.endswith(".txt"):
         return TextLoader(file_path).load()
+    elif file_type.endswith(".xlsx"):
+        return excel_parser(file_path)
     
     else:
         raise ValueError("Unsupported file format")
 
-# Embed & store docs
 def embed_documents(docs):
     """
-    Helps with Splitting the docs based on Character Splitter and returning the embeddings for the same
-
-    Parameters: docs uploaded by the user and Parsed via Langchain Document Loaders
-
-    Reetur: Embedding Generation of the relevant docs
+    Splits docs into chunks, embeds them, and builds a FAISS vectorstore,
+    showing a progress bar in Streamlit as it goes.
     """
-    ## If the result is a single string wrap it as a doc
-    if isinstance(docs,str):
+    # --- Normalize input into List[Document] ---
+    if isinstance(docs, str):
         docs = [Document(page_content=docs)]
-    
-    
-    ## Sanity Check for Document List
-    elif isinstance(docs,list):
-        if all(isinstance(d,str) for d in docs):
-            print("[INFO] Received list of strings. Wrapping each in Document...")
-            docs = [Document(page_content=text) for text in docs]
-        elif all(isinstance(d,Document) for d in docs):
-            print("Info Received as Document Objects")
-    
-    print(f"[DEBUG] Number of documents before chunking: {len(docs)}")
-    print(f"[DEBUG] Preview content:\n{docs[0].page_content[:300]}")
+    elif isinstance(docs, list):
+        # If it's a list of raw strings, merge into one Document
+        if all(isinstance(d, str) for d in docs):
+            merged = "\n".join(docs).strip()
+            if not merged:
+                raise ValueError("No content to embed after merging string docs.")
+            docs = [Document(page_content=merged)]
+        # If it's already Documents, leave as-is
+        elif all(isinstance(d, Document) for d in docs):
+            pass
+        else:
+            raise ValueError("`docs` must be a list of str or a list of Document objects")
+    else:
+        raise ValueError("`docs` must be a str or list")
 
+    # --- Debug preview ---
+    st.info(f"🔍 Preparing to chunk {len(docs)} document(s).")
+    st.text(docs[0].page_content[:300] + ("…" if len(docs[0].page_content) > 300 else ""))
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=50)
+    # --- Chunk documents ---
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(docs)
+    total_chunks = len(chunks)
+    st.info(f"🔀 Chunked into {total_chunks} pieces.")
+
+    if total_chunks == 0:
+        raise ValueError("No chunks generated—check your input documents.")
+
+    # --- Initialize embeddings & empty FAISS index ---
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
     vectorstore = FAISS.from_documents(chunks, embedding=embeddings)
+
+    
     return vectorstore
 
 # Async Ollama call with streaming
@@ -136,8 +150,8 @@ if st.session_state.db:
             st.warning("!! No Relevant Documents retrieved from the query")
         else:
             st.info(f"Retrieved {len(docs)} relevant chunks.")
-            for i, doc in enumerate(docs):
-                st.text(f"Chunk {i+1}:\n{doc.page_content[:200]}...\n")
+            # for i, doc in enumerate(docs):
+            #     st.text(f"Chunk {i+1}:\n{doc.page_content[:200]}...\n")
 
         context = "\n\n".join([doc.page_content for doc in docs])
     
