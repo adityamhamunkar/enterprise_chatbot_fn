@@ -39,9 +39,12 @@ def embed_documents(docs):
     if isinstance(docs,str):
         docs = [Document(page_content=docs)]
     
+    
     ## Sanity Check for Document List
     elif isinstance(docs,list) and all(isinstance(d,str) for d in docs):
         docs = [Document(page_content=text) for text in docs]
+    print("all docs",docs)
+
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(docs)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -66,7 +69,7 @@ st.title("📄💬 Ask Questions Over Your Documents (llama3)")
 
 ## Upload & Index Documents
 with st.expander("Upload Documents for QA",expanded = True):
-    uploaded_file = st.file_uploader("Upload a document (PDF, DOCX,XLSX or TXT)", type=["pdf", "docx", "txt","xlsx"])
+    uploaded_files = st.file_uploader("Upload a document (PDF, DOCX,XLSX or TXT)", type=["pdf", "docx", "txt","xlsx"],accept_multiple_files=True)
 
 
 
@@ -77,17 +80,25 @@ if "db" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+if "uploaded_filenames" not in st.session_state:
+    st.session_state.uploaded_filenames = []
 
-if uploaded_file and st.session_state.db is None:
-    with st.spinner("Processing and Indexing Document ....."):
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(uploaded_file.read())
-            file_path = tmp.name
-        docs = load_file(file_path ,uploaded_file.name)
-        db = embed_documents(docs)
-        st.session_state.db = db
-        os.unlink(file_path)
-    st.success("Document processed and Indexed for chat")
+
+if uploaded_files and st.session_state.db is None:
+    all_docs = []
+    filenames = []
+    with st.spinner("Processing and Indexing Documents ....."):
+        for uploaded_file in uploaded_files:
+            filenames.append(uploaded_file.name)
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(uploaded_file.read())
+                file_path = tmp.name
+            docs = load_file(file_path ,uploaded_file.name)
+            os.unlink(file_path)
+            all_docs.extend(docs)
+        st.session_state.db = embed_documents(all_docs)
+        st.session_state.uploaded_filenames = filenames
+    st.success(f"Indexed {len(filenames)} file(s): {', '.join(filenames)}")
 
 
 
@@ -95,7 +106,8 @@ if uploaded_file and st.session_state.db is None:
 
 if st.session_state.db:
     with st.chat_message("ai"):
-        st.markdown(f"fHi!! Ask me Anything about {uploaded_file.name}")
+        uploaded_list=",".join(st.session_state.uploaded_filenames)
+        st.markdown(f"fHi!! Ask me Anything about {uploaded_list}")
 
     
     ## Display previous interactions
@@ -113,6 +125,14 @@ if st.session_state.db:
     ## Retrieve relevant context
         retriever = st.session_state.db.as_retriever(search_kwargs={"k": 5})
         docs = retriever.get_relevant_documents(user_query)
+
+        if not docs:
+            st.warning("!! No Relevant Documents retrieved from the query")
+        else:
+            st.info(f"Retrieved {len(docs)} relevant chunks.")
+            for i, doc in enumerate(docs):
+                st.text(f"Chunk {i+1}:\n{doc.page_content[:200]}...\n")
+
         context = "\n\n".join([doc.page_content for doc in docs])
     
     # Stream Response
@@ -130,5 +150,3 @@ if st.session_state.db:
             ai_response = asyncio.run(run_qa())
 
         st.session_state.chat_history.append({"role": "ai", "content": ai_response})
-
-
