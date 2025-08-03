@@ -11,9 +11,7 @@ from langchain.schema import Document
 def docling_pdf_parser(pdf_path):
     converter = DocumentConverter()
     result = converter.convert(pdf_path)
-    markdown_text = result.document.export_to_markdown()
-    
-    print("[DEBUG] First 300 characters of parsed text:\n", markdown_text[:300])
-    
+    markdown_text = result.document.export_to_markdown()    
+    print("[DEBUG] First 300 characters of parsed text:\n", markdown_text[:300])    
     return [Document(page_content=markdown_text)]
 

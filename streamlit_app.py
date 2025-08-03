@@ -41,19 +41,26 @@ def embed_documents(docs):
     
     
     ## Sanity Check for Document List
-    elif isinstance(docs,list) and all(isinstance(d,str) for d in docs):
-        docs = [Document(page_content=text) for text in docs]
-    print("all docs",docs)
+    elif isinstance(docs,list):
+        if all(isinstance(d,str) for d in docs):
+            print("[INFO] Received list of strings. Wrapping each in Document...")
+            docs = [Document(page_content=text) for text in docs]
+        elif all(isinstance(d,Document) for d in docs):
+            print("Info Received as Document Objects")
+    
+    print(f"[DEBUG] Number of documents before chunking: {len(docs)}")
+    print(f"[DEBUG] Preview content:\n{docs[0].page_content[:300]}")
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=50)
     chunks = splitter.split_documents(docs)
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
     vectorstore = FAISS.from_documents(chunks, embedding=embeddings)
     return vectorstore
 
 # Async Ollama call with streaming
 async def async_qa(question, context):
-    prompt = f"Answer the question based on the context with proper reasoning .Be Polite and Explain in brief.\n\nContext:\n{context}\n\nQuestion: {question}"
+    prompt = f"Answer the question based on the context with proper reasning .Be Polite and Explain in brief.\n\nContext:\n{context}\n\nQuestion: {question}"
     message = {'role': 'user', 'content': prompt}
     output = ""
     async for part in await AsyncClient().chat(model='llama3', messages=[message], stream=True):
@@ -123,8 +130,7 @@ if st.session_state.db:
             st.markdown(user_query)
     
     ## Retrieve relevant context
-        retriever = st.session_state.db.as_retriever(search_kwargs={"k": 5})
-        docs = retriever.get_relevant_documents(user_query)
+        docs = st.session_state.db.similarity_search(user_query, k=8)       
 
         if not docs:
             st.warning("!! No Relevant Documents retrieved from the query")
