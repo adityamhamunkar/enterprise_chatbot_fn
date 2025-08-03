@@ -4,24 +4,25 @@ from langchain.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
+from langchain.schema import Document
 from ollama import AsyncClient
 import asyncio
 import os
 
 
-from utilities.excel_loader import load_excel_as_query_engine
+# from utilities.excel_loader import load_excel_as_query_engine
+from utilities.pdf_parser import docling_pdf_parser
 
 
 # Helper to load supported files
 def load_file(file_path, file_type):
     if file_type.endswith(".pdf"):
-        return PyPDFLoader(file_path).load()
+        return docling_pdf_parser(file_path)
     elif file_type.endswith(".docx"):
         return Docx2txtLoader(file_path).load()
     elif file_type.endswith(".txt"):
         return TextLoader(file_path).load()
-    elif file_type.endswith(".xlsx"):
-        return load_excel_as_query_engine(file_path).load
+    
     else:
         raise ValueError("Unsupported file format")
 
@@ -34,6 +35,13 @@ def embed_documents(docs):
 
     Reetur: Embedding Generation of the relevant docs
     """
+    ## If the result is a single string wrap it as a doc
+    if isinstance(docs,str):
+        docs = [Document(page_content=docs)]
+    
+    ## Sanity Check for Document List
+    elif isinstance(docs,list) and all(isinstance(d,str) for d in docs):
+        docs = [Document(page_content=text) for text in docs]
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(docs)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
