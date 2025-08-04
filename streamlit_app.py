@@ -8,6 +8,7 @@ from langchain.schema import Document
 from ollama import AsyncClient
 import asyncio
 import os
+import tqdm
 
 
 # from utilities.excel_loader import load_excel_as_query_engine
@@ -28,6 +29,7 @@ def load_file(file_path, file_type):
     
     else:
         raise ValueError("Unsupported file format")
+
 
 def embed_documents(docs):
     """
